@@ -1,0 +1,4 @@
+(sym_lib_table
+  (lib (name alipart)(type Legacy)(uri D:/PCB/fake-fan-mk2/alipart.lib)(options "")(descr ""))
+  (lib (name akipart)(type Legacy)(uri D:/PCB/fake-fan-simple/akipart.lib)(options "")(descr ""))
+)
