@@ -1,1 +1,3 @@
-FFdebug/build
+build/*
+*.s
+*.ld
