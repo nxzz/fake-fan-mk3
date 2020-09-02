@@ -1,3 +1,4 @@
 (fp_lib_table
   (lib (name pot)(type KiCad)(uri ${KIPRJMOD}/pot.pretty)(options "")(descr ""))
+  (lib (name ilks)(type KiCad)(uri ${KIPRJMOD}/ilks.pretty)(options "")(descr ""))
 )
