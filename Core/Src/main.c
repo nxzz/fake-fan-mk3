@@ -46,7 +46,7 @@ ADC_HandleTypeDef hadc;
 DMA_HandleTypeDef hdma_adc;
 
 TIM_HandleTypeDef htim1;
-TIM_HandleTypeDef htim3;
+TIM_HandleTypeDef htim14;
 TIM_HandleTypeDef htim16;
 TIM_HandleTypeDef htim17;
 
@@ -64,8 +64,8 @@ static void MX_TIM1_Init(void);
 static void MX_ADC_Init(void);
 static void MX_TIM16_Init(void);
 static void MX_TIM17_Init(void);
-static void MX_TIM3_Init(void);
 static void MX_USART1_UART_Init(void);
+static void MX_TIM14_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -109,13 +109,13 @@ int main(void)
   MX_ADC_Init();
   MX_TIM16_Init();
   MX_TIM17_Init();
-  MX_TIM3_Init();
   MX_USART1_UART_Init();
+  MX_TIM14_Init();
   /* USER CODE BEGIN 2 */
   // Real Fan RPM
   HAL_TIM_Base_Start(&htim1);
   // 0.05 Sec IT
-  HAL_TIM_Base_Start_IT(&htim3);
+  HAL_TIM_Base_Start_IT(&htim14);
   // Fake Pulse Output
   HAL_TIM_PWM_Start(&htim17, TIM_CHANNEL_1);
   // Real Fan PWM
@@ -137,9 +137,10 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-    // __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_4, 100);
-    // HAL_Delay(500);
-    // __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_4, 999); 
+    // uint32_t freq = __HAL_TIM_GET_COUNTER(&htim14);
+    // uint8_t gu8_MSG[40] = {'\0'};
+    // sprintf(gu8_MSG, "Frequency2 = %d Hz\n\r", freq);
+    // HAL_UART_Transmit(&huart1, gu8_MSG, sizeof(gu8_MSG), 100);
     // HAL_Delay(500);
   }
   /* USER CODE END 3 */
@@ -297,47 +298,33 @@ static void MX_TIM1_Init(void)
 }
 
 /**
-  * @brief TIM3 Initialization Function
+  * @brief TIM14 Initialization Function
   * @param None
   * @retval None
   */
-static void MX_TIM3_Init(void)
+static void MX_TIM14_Init(void)
 {
 
-  /* USER CODE BEGIN TIM3_Init 0 */
+  /* USER CODE BEGIN TIM14_Init 0 */
 
-  /* USER CODE END TIM3_Init 0 */
+  /* USER CODE END TIM14_Init 0 */
 
-  TIM_ClockConfigTypeDef sClockSourceConfig = {0};
-  TIM_MasterConfigTypeDef sMasterConfig = {0};
+  /* USER CODE BEGIN TIM14_Init 1 */
 
-  /* USER CODE BEGIN TIM3_Init 1 */
-
-  /* USER CODE END TIM3_Init 1 */
-  htim3.Instance = TIM3;
-  htim3.Init.Prescaler = 100;
-  htim3.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim3.Init.Period = 4000;
-  htim3.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
-  htim3.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
-  if (HAL_TIM_Base_Init(&htim3) != HAL_OK)
+  /* USER CODE END TIM14_Init 1 */
+  htim14.Instance = TIM14;
+  htim14.Init.Prescaler = 1000 - 1;
+  htim14.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim14.Init.Period = 4000;
+  htim14.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim14.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_ENABLE;
+  if (HAL_TIM_Base_Init(&htim14) != HAL_OK)
   {
     Error_Handler();
   }
-  sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
-  if (HAL_TIM_ConfigClockSource(&htim3, &sClockSourceConfig) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
-  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
-  if (HAL_TIMEx_MasterConfigSynchronization(&htim3, &sMasterConfig) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  /* USER CODE BEGIN TIM3_Init 2 */
+  /* USER CODE BEGIN TIM14_Init 2 */
 
-  /* USER CODE END TIM3_Init 2 */
+  /* USER CODE END TIM14_Init 2 */
 
 }
 
@@ -511,7 +498,7 @@ static void MX_DMA_Init(void)
 
   /* DMA interrupt init */
   /* DMA1_Channel1_IRQn interrupt configuration */
-  HAL_NVIC_SetPriority(DMA1_Channel1_IRQn, 0, 0);
+  HAL_NVIC_SetPriority(DMA1_Channel1_IRQn, 3, 0);
   HAL_NVIC_EnableIRQ(DMA1_Channel1_IRQn);
 
 }
@@ -530,44 +517,64 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
+uint16_t oldvalVR = 0;
+uint16_t oldvalPWM = 0;
+int EnableFakeFan = 1;
+
+
+// 1000 = MAXRPM
+void setFakePWM(int rpm){
+  uint16_t MAXRPM = 12000;
+  uint16_t TargetRPM = MAXRPM * rpm / 1000;
+  uint16_t period = 8 * 1000 * 1000 / htim17.Init.Prescaler / TargetRPM * 60 / 2;
+  __HAL_TIM_SET_AUTORELOAD(&htim17, period - 1);
+  __HAL_TIM_SET_COMPARE(&htim17, TIM_CHANNEL_1, period/2);
+}
+
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef* htim)
 {
-    if(htim->Instance == &htim3.Instance)
-    {
-    	uint32_t freq = __HAL_TIM_GET_COUNTER(&htim1) * 20;
+    if (htim->Instance == TIM14) {
+      // 0.5 second
+      // 1 rotate 2 pulese
+    	uint32_t rpm = __HAL_TIM_GET_COUNTER(&htim1) * 2 / 2 * 60;
       uint8_t gu8_MSG[40] = {'\0'};
-    	sprintf(gu8_MSG, "Frequency = %d Hz\n\r", freq);
+    	sprintf(gu8_MSG, "FanRPM = %d \n\r", rpm);
     	HAL_UART_Transmit(&huart1, gu8_MSG, sizeof(gu8_MSG), 100);
+
+      // Fan Lower Limit
+      if(rpm < 200){
+        EnableFakeFan = 0;
+        // Fire Fan Failure to Host
+        setFakePWM(10);
+      }else{
+        oldvalPWM -= 10;
+        EnableFakeFan = 1;
+      }
     	__HAL_TIM_SET_COUNTER(&htim1, 0);
-    	__HAL_TIM_SET_COUNTER(&htim3, 0);
     }
 }
 
 
-
-uint16_t oldvalVR = 0;
-uint16_t oldvalPWM = 0;
 void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* AdcHandle)
 {
   // Read VR
 	 uint16_t valVR = g_ADCBuffer[0]*1000/4096;
 	 uint16_t absVR = valVR >= oldvalVR ? valVR - oldvalVR : oldvalVR - valVR;
-	 if( absVR >= 2 ){
+	 if( absVR >= 10 ){
     oldvalVR = valVR;
     __HAL_TIM_SET_COMPARE(&htim16, TIM_CHANNEL_1, valVR);
+      uint8_t gu8_MSG[40] = {'\0'};
+    	sprintf(gu8_MSG, "valVR = %d /1000\n\r", valVR);
+    	HAL_UART_Transmit(&huart1, gu8_MSG, sizeof(gu8_MSG), 100);
 	 }
 
   // Read PWM
 	 uint16_t valPWM = g_ADCBuffer[1] * 1000 * 5 / 3.3 /4096;
 	 uint16_t absPWM = valPWM >= oldvalPWM ? valPWM - oldvalPWM : oldvalPWM - valPWM;
-	 if( absPWM >= 2 ){
+	 if( absPWM >= 10 && EnableFakeFan == 1){
 		  oldvalPWM = valPWM;
     // period = TIM_CLOCK / PSC / (TargetRPM / 60 * 2);
-      uint16_t MAXRPM = 12000;
-      uint16_t TargetRPM = MAXRPM * valPWM / 1000;
-      uint16_t period = 8 * 1000 * 1000 / htim17.Init.Prescaler / TargetRPM * 60 / 2;
-      __HAL_TIM_SET_AUTORELOAD(&htim17, period - 1);
-		  __HAL_TIM_SET_COMPARE(&htim17, TIM_CHANNEL_1, period/2);
+      setFakePWM(valPWM);
 	 }
 }
 /* USER CODE END 4 */
